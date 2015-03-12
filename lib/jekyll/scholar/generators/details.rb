@@ -16,6 +16,8 @@ module Jekyll
         read_yaml(File.join(base, '_layouts'), config['details_layout'])
 
         data['entry'] = liquidify(entry)
+        data['link'] = repository_link_for(entry)
+        data['links'] = repository_links_for(entry)
       end
 
     end

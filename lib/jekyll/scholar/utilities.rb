@@ -34,6 +34,14 @@ module Jekyll
             @cited = true
           end
 
+          opts.on('-D', '--linkdetails') do
+            @linkdetails = true
+          end
+
+          opts.on('-L', '--linkonly') do
+            @linkonly = true
+          end
+
           opts.on('-C', '--cited_in_order') do |cited|
             @cited, @skip_sort = true, true
           end
@@ -76,7 +84,7 @@ module Jekyll
           end
         end
 
-        argv = arguments.split(/(\B-[cCfqptTslmA]|\B--(?:cited(_in_order)?|file|query|prefix|text|style|template|locator|max|suppress_author|))/)
+        argv = arguments.split(/(\B-[cCfqptTslmA]|\B--(?:cited(_in_order)?|file|query|prefix|text|style|template|locator|max|suppress_author|linkdetails|linkonly|))/)
 
         parser.parse argv.map(&:strip).reject(&:empty?)
       end
@@ -176,8 +184,14 @@ module Jekyll
         return repo unless repository?
 
         Dir[File.join(repository_path, '**/*')].each do |path|
-          extname = File.extname(path)
-          repo[File.basename(path, extname)][extname[1..-1]] = path
+          base1 = File.basename(path)
+          extname1 = File.extname(path)
+          base2 = File.basename(base1, extname1)
+          extname2 = File.extname(base2)
+          base3 = File.basename(base2, extname2)
+          extname = (extname2 + extname1)[1..-1]
+          
+          repo[base3][extname] = path
         end
 
         repo
@@ -315,6 +329,10 @@ module Jekyll
         site.layouts.key?(File.basename(config['details_layout'], '.html'))
       end
 
+      def generate_details_link?
+        config['details_link'] != ""
+      end
+
       def details_file_for(entry)
         name = entry.key.to_s.dup
 
@@ -360,15 +378,27 @@ module Jekyll
       end
 
       def render_citation(items)
-        renderer.render items.zip(locators).map { |entry, locator|
+        return renderer.render_citation items.zip(locators).map { |entry, locator|
           cited_keys << entry.key
           cited_keys.uniq!
 
           item = citation_item_for entry, citation_number(entry.key)
           item.locator = locator
 
+          if @linkdetails
+            href = details_link_for(entry)
+            item.prefix = "<a href=\"" + href + "\">"
+            item.suffix = "</a>"
+          end
+
           item
         }, STYLES[style].citation
+      end
+
+      def render_abstract(items)
+        items.map { | item |
+          item.abstract
+        }
       end
 
       def render_bibliography(entry, index = nil)
@@ -380,6 +410,9 @@ module Jekyll
         CiteProc::CitationItem.new id: entry.id do |c|
           c.data = CiteProc::Item.new entry.to_citeproc
           c.data[:'citation-number'] = citation_number
+#          if @linkdetails
+#            c.data[:'entrylink'] = details_link_for(entry)
+#          end
           c.data.suppress! 'author' if suppress_author?
         end
       end
@@ -402,12 +435,33 @@ module Jekyll
           end
         end
 
-        link_to "##{[prefix, keys[0]].compact.join('-')}", render_citation(items)
+        if @linkdetails
+          return render_citation(items)
+        else
+          return link_to "##{[prefix, keys[0]].compact.join('-')}", render_citation(items)
+        end
+      end
+
+      def abstract(keys)
+        items = keys.map do |key|
+          if bibliography.key?(key)
+            entry = bibliography[key]
+            entry = entry.convert(*bibtex_filters) unless bibtex_filters.empty?
+          else
+            return missing_reference
+          end
+        end
+
+        render_abstract(items)
       end
 
       def cite_details(key, text)
         if bibliography.key?(key)
-          link_to details_link_for(bibliography[key]), text || config['details_link']
+          if @linkonly
+            details_link_for(bibliography[key])
+          else
+            link_to details_link_for(bibliography[key]), text || config['details_link']
+          end
         else
           missing_reference
         end

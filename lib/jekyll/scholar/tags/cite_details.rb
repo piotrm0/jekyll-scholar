@@ -16,11 +16,14 @@ module Jekyll
       def render(context)
         set_context_to context
         keys.map { |key|
-          cite_details key, text
+          if @text
+            cite_details key, (Liquid::Template.parse(@text).render context)
+          else
+            cite_details key, nil
+          end
         }.join("\n")
       end
     end
-
   end
 end
 
